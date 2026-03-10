@@ -1,0 +1,22 @@
+# Large data files
+data/
+pictures/
+sounds/
+wandb/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Model files
+*.pth
+
+# VS Code
+.vscode/
+.vs/
+
+# Temporary files
+*.tmp
+*.log
