@@ -28,15 +28,17 @@ def main():
     learning_rate = 0.0001  # הגדלתי את קצב הלמידה
     epochs = 100000
     epoch = 0
-    C = 3
+    C = 4
     loss = torch.tensor(0)
     optim = torch.optim.Adam(player.DQN.parameters(), lr=learning_rate)
     # scheduler = torch.optim.lr_scheduler.StepLR(optim,100000, gamma=0.50)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optim,[5000*1000, 10000*1000, 15000*1000], gamma=0.5)
     
-    num = 1
-    checkpoint_path = f"thegame/save_model/checkpoint{num}.pth"
-    buffer_path = f"thegame/save_model/buffer{num}.pth"
+    num = 9
+    checkpoint_path = f"/save_model/checkpoint{num}.pth"
+    buffer_path = f"/save_model/buffer{num}.pth"
+
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
 
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
@@ -55,19 +57,25 @@ def main():
     step = 0
     reward= 0
     loss = torch.tensor(0)
-    wanrun = wandb.init(project="space", entity="seviselad-park-hamada")
+    wanrun = wandb.init(project="F-15", name=f"test {num}")
     while(not stop):
         step += 1
-        print("                                                                     ",end='\r')
-        print(f'epoch: {epoch} step: {step} reward: {reward:.3f} loss: {loss.item():.3f}', end='\r')
         events = pygame.event.get()
         for event in events:
             if event.type == pygame.QUIT:
                 stop = True
                 break
         if done:
+            # print("                                                                     ",end='\r')
+            print(f'epoch: {epoch} step: {step} reward: {reward:.3f} loss: {loss.item():.3f}')
+
             epoch += 1
-            if epoch % 10 == 0:
+            wanrun.log({
+                "time": env.time, 
+                "reward": env.reward,
+                "step_to_end": step 
+                })
+            if epoch % 1000 == 0:
                 print("Saving model and buffer...")
                 checkpoint = {
                     'epoch': epoch,
@@ -76,14 +84,14 @@ def main():
                     'scheduler_state_dict': scheduler.state_dict(),
                     'time': env.time,
                 }
-                wanrun.log({"time": env.time, "reward": env.reward, "epoch": epoch, })
+                
                 torch.save(checkpoint, checkpoint_path)
                 torch.save(buffer, buffer_path)
             if epoch == epochs:
                 break
             # create new environment and human agent
             env.reset()
-
+            step = 0
         env.render()
         
         

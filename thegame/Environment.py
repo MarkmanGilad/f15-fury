@@ -14,12 +14,13 @@ WIDTH, HEIGHT = 1450, 720
 FPS = 60
 DIE_REWARD     = -1.0      # עונש למוות
 HOLE_REWARD    = 0.9       # תגמול על הימצאות לאמצע החור
-DISTANCE_REWARD = 0.05     # עונש על מרחק מהחור
+DISTANCE_REWARD = 0.3     # עונש על מרחק מהחור
 ENEMY_REWARD   = 0.1       # תגמול על הריגת אויב
 PICKUP_REWARD  = 0.1       # תגמול על איסוף דלק
 SHOOT_REWARD   = -0.02     # עונש על יריות
 SURVIVAL_REWARD = 0.01     # תגמול על הישרדות
 THROUGH_HOLE_REWARD = 0.5  # תגמול על מעבר דרך חור
+HOLE_CENTER_TOLERANCE = 10  # pixels: considered aligned to hole center
 
 
 class Environment(): 
@@ -144,8 +145,6 @@ class Environment():
         self.buildingsG.draw(self.main_surf)
         self.player.bullet_group.draw(self.main_surf)
         self.fuels.draw(self.main_surf)
-        self.check_fuel_pickup()
-        self.hit()
 
         self.screen.blit(self.main_surf, (0, 0))
         pygame.display.update()
@@ -164,22 +163,43 @@ class Environment():
 
     def move(self, action):
         done = False
-        self.reward = 0
+        self.reward = 0.0
         height1 = list(self.buildingsG)[0].rect.top
-        height2 = list(self.buildingsG)[1].rect.bottom   
+        height2 = list(self.buildingsG)[1].rect.bottom
+        middle_hole_y = (height1 + height2) / 2
         
         self.player.move(action)
         Environment.episode_steps += 1
         
-        # אם מת - עונש, ועוד עונש קטן יותר אם מת בזמן קצר
+        # a) die / out of gas
         if self.is_coliding() or self.is_no_gas():
-            early_death_penalty = max(0, 0.1 - Environment.episode_steps / 10000)  # עונש קטן יותר אם מת מהר
-            return DIE_REWARD - early_death_penalty, True
+            return DIE_REWARD, True
         
-        self.reward += self.building_reward()
+        # d) directional distance reward: teach agent to align to hole center (±10px)
+        player_center_y = self.player.rect.centery
+        delta = middle_hole_y - player_center_y  # + => hole below, - => hole above
+        if abs(delta) <= HOLE_CENTER_TOLERANCE:
+            # aligned: vertical movement is bad
+            if action in (1, 2):
+                self.reward -= DISTANCE_REWARD
+        elif delta > HOLE_CENTER_TOLERANCE:
+            # hole is below -> down (2) good, up (1) bad, else half penalty
+            if action == 2:
+                self.reward += DISTANCE_REWARD
+            elif action == 1:
+                self.reward -= DISTANCE_REWARD
+            else:
+                self.reward -= DISTANCE_REWARD / 2
+        else:  # delta < -HOLE_CENTER_TOLERANCE
+            # hole is above -> up (1) good, down (2) bad, else half penalty
+            if action == 1:
+                self.reward += DISTANCE_REWARD
+            elif action == 2:
+                self.reward -= DISTANCE_REWARD
+            else:
+                self.reward -= DISTANCE_REWARD / 2
 
-        self.reward += SURVIVAL_REWARD
-
+        # shoot reward/penalty
         if action == 5:
             self.reward += SHOOT_REWARD
         Building.speed += 0.005
@@ -193,11 +213,13 @@ class Environment():
         self.player.bullet_group.update()
         self.fuels.update()
 
-        if self.hit(): # הפונקציה מחזירה True אם היה hit
+        # b) kill enemy
+        if self.hit():
             self.reward += ENEMY_REWARD
         
     # בדוק אם אסף דלק
-        if self.check_fuel_pickup(): # תצטרך ליצור פונקציה לוגית כזו
+        # c) pickup fuel
+        if self.check_fuel_pickup():
             self.reward += PICKUP_REWARD
 
         if len(self.buildingsG) == 0:
@@ -218,9 +240,6 @@ class Environment():
         if self.moon["x"] + self.moon["radius"] < 0:  # אם הירח יוצא מהמסך, החזר אותו לצד ימין
             self.moon["x"] = WIDTH
 
-        # print("reward: ", self.reward)
-        if list(self.buildingsG)[0].rect.x < self.player.rect.x and list(self.buildingsG)[1].rect.x < self.player.rect.x:
-            self.reward += THROUGH_HOLE_REWARD
         return self.reward, done
         
 
@@ -239,14 +258,12 @@ class Environment():
 
     def check_fuel_pickup(self):
         collision = pygame.sprite.groupcollide(self.player_group, self.fuels, False, True, pygame.sprite.collide_rect)
-        if collision: 
-            # self.reward+=PICKUP_REWARD
-            # print("sheeeeeeeeeeeep")
-            pass
-        if collision and Environment.precentage < 100:
+        picked_up = bool(collision)
+        if picked_up and Environment.precentage < 100:
             # sheep = pygame.mixer.Sound("sounds/sheep.mp3").play()
             # sheep.set_volume(0.05)
             Environment.precentage += 2
+        return picked_up
 
     def display_out_of_gas_image(self):
         self.main_surf.blit(self.outofgas, ((WIDTH - 400) / 2  , (HEIGHT - 200) / 2))

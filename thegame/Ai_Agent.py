@@ -3,7 +3,7 @@ import random
 import math
 from DQN import DQN
 
-epsilon_start, epsilon_final, epsiln_decay = 1, 0.01, 1000  # הארכתי את זמן החקירה
+epsilon_start, epsilon_final, epsiln_decay = 1, 0.01, 100  # הארכתי את זמן החקירה
 
 class DQN_Agent:
     def __init__(self, parametes_path = None, train = True, env= None, devive = torch.device('cpu')):
